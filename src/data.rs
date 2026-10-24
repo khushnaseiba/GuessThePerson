@@ -38,3 +38,25 @@ pub const PEOPLE: [Person; 20] = [
     Person { name: "Skye", traits: 785 },
     Person { name: "Theo", traits: 262 },
 ];
+
+pub const INVALID: u32 = u32::MAX;
+pub const ALL_CANDIDATES: u32 = (1 << PEOPLE.len()) - 1;
+
+pub fn yes_mask(property: u32) -> u32 {
+    PEOPLE.iter().enumerate().fold(0, |mask, (index, person)| {
+        if person.traits & (1 << property) != 0 {
+            mask | (1 << index)
+        } else {
+            mask
+        }
+    })
+}
+
+pub fn useful_question(candidates: u32, property: u32) -> bool {
+    if property as usize >= PROPERTY_PHRASES.len() {
+        return false;
+    }
+    let yes = candidates & yes_mask(property);
+    let no = candidates & !yes_mask(property);
+    yes != 0 && no != 0
+}

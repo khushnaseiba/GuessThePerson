@@ -1,20 +1,7 @@
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Guess the Person - Prototype</title>
-  <link rel="stylesheet" href="./style.css">
-</head>
-<body>
-  <main>
-    <header><span class="mark">?</span><div><p class="overline">WASM EXPERIMENT / 001</p><h1>Guess the Person</h1></div></header>
-    <p class="intro">First pass: load the roster from Rust and put every face on the board.</p>
-    <div id="error" role="alert" hidden></div>
-    <div class="toolbar"><strong>People on the board</strong><span id="count">-</span></div>
-    <div id="people-grid" class="grid"></div>
-    
-  </main>
-  <script src="./app.js"></script>
-</body>
-</html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Guess the Person - Core Gameplay</title><link rel="stylesheet" href="./style.css"></head>
+<body><main><header><div><p class="overline">WASM EXPERIMENT / 002</p><h1>Guess the Person</h1></div><button id="new-game">New board</button></header>
+<p class="intro">Ask about a visual trait and cross off everyone who does not match the answer.</p><div id="error" role="alert" hidden></div>
+<div class="play-area"><aside><div class="panel"><span class="overline">YOUR QUESTIONS</span><h2>Pick a trait</h2><div id="questions" class="questions"></div><p id="note" class="muted">Choose any question that splits the current board.</p></div><div class="panel"><span class="overline">LAST ANSWER</span><p id="answer">No question asked yet.</p><strong id="status">20 people remaining</strong></div></aside>
+<section class="panel"><div class="board-head"><div><span class="overline">CANDIDATE BOARD</span><h2>Who is the person?</h2></div><strong id="count">20</strong></div><div id="people-grid" class="grid"></div></section></div></main><script src="./app.js"></script></body></html>

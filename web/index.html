@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Guess the Person - Prototype</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <main>
+    <header><span class="mark">?</span><div><p class="overline">WASM EXPERIMENT / 001</p><h1>Guess the Person</h1></div></header>
+    <p class="intro">First pass: load the roster from Rust and put every face on the board.</p>
+    <div id="error" role="alert" hidden></div>
+    <div class="toolbar"><strong>People on the board</strong><span id="count">-</span></div>
+    <div id="people-grid" class="grid"></div>
+    
+  </main>
+  <script src="./app.js"></script>
+</body>
+</html>

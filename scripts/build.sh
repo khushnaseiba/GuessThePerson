@@ -8,4 +8,6 @@ fi
 rustup target add wasm32-unknown-unknown
 cargo build --release --target wasm32-unknown-unknown
 cp target/wasm32-unknown-unknown/release/guess_person_wasm.wasm web/game.wasm
+mkdir -p web/assets
+cp -R assets/. web/assets/
 printf '%s\n' "Built web/game.wasm"

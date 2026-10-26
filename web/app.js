@@ -13,7 +13,7 @@ function readString(pointer, length) {
 }
 function makePortrait(index) {
   const image = document.createElement("img");
-  image.src = `../assets/portraits/person-${String(index).padStart(2, "0")}.svg`;
+  image.src = `./assets/portraits/person-${String(index).padStart(2, "0")}.svg`;
   image.alt = `${people[index].name} portrait`;
   image.loading = "lazy";
   return image;

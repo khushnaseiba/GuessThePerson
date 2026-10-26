@@ -12,4 +12,4 @@ run:
 
 and visit http://localhost:8000
 
-or [Play online](https://khushnaseiba.github.io/guess-the-person)!
+or [Play online](https://khushnaseiba.github.io/GuessThePerson/)!

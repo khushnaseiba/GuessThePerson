@@ -148,3 +148,67 @@ impl Game {
         0
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_person_has_a_distinct_property_profile() {
+        for left in 0..PEOPLE.len() {
+            for right in left + 1..PEOPLE.len() {
+                assert_ne!(PEOPLE[left].traits, PEOPLE[right].traits);
+            }
+        }
+    }
+
+    #[test]
+    fn question_reduces_candidates_and_keeps_the_target() {
+        let mut game = Game::new(71);
+        let before = game.candidates.count_ones();
+        let property = (0..PROPERTY_PHRASES.len() as u32)
+            .find(|property| game.can_ask(*property))
+            .unwrap();
+        let result = game.ask(property);
+        assert!(result == 0 || result == 3 || result == 4);
+        assert!(game.candidates.count_ones() < before || game.winner != 0);
+        assert_ne!(game.candidates & (1 << game.bot_target), 0);
+    }
+
+    #[test]
+    fn invalid_and_unhelpful_questions_do_not_mutate_candidates() {
+        let mut game = Game::new(9);
+        let before = game.candidates;
+        assert_eq!(game.ask(99), 1);
+        assert_eq!(game.candidates, before);
+        game.candidates = (1 << 0) | (1 << 1);
+        let property = (0..PROPERTY_PHRASES.len() as u32)
+            .find(|property| !useful_question(game.candidates, *property))
+            .unwrap();
+        assert_eq!(game.ask(property), 2);
+        assert_eq!(game.candidates, (1 << 0) | (1 << 1));
+    }
+
+    #[test]
+    fn one_candidate_wins_before_another_question() {
+        let mut game = Game::new(31);
+        game.candidates = 1 << game.bot_target;
+        assert_eq!(game.ask(0), 3);
+        assert_eq!(game.winner, 1);
+    }
+
+    #[test]
+    fn a_full_game_eventually_finishes() {
+        let mut game = Game::new(2026);
+        for _ in 0..30 {
+            if game.winner != 0 {
+                break;
+            }
+            let property = (0..PROPERTY_PHRASES.len() as u32)
+                .find(|property| game.can_ask(*property))
+                .unwrap();
+            game.ask(property);
+        }
+        assert_ne!(game.winner, 0);
+    }
+}

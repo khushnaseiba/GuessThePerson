@@ -4,9 +4,9 @@ const invalid = 0xffffffff;
 let wasm;
 let people = [];
 let properties = [];
-let selectedPerson = -1;
 let pendingBotQuestion = invalid;
 let botTimer = 0;
+let nextPickerTimer = 0;
 
 function readString(pointer, length) {
   return utf8.decode(new Uint8Array(wasm.memory.buffer, pointer, length));
@@ -17,10 +17,6 @@ function makePortrait(index) {
   image.alt = `${people[index].name} portrait`;
   image.loading = "lazy";
   return image;
-}
-function setConnection(text, ready = false) {
-  $("#connection-status").textContent = text;
-  $(".status-dot").style.background = ready ? "var(--mint)" : "var(--accent)";
 }
 function buildPersonCard(index, picker = false) {
   const card = document.createElement("button");
@@ -108,7 +104,13 @@ function renderResult() {
   const copy = winner === 1 ? `You found ${people[Array.from({length: people.length}, (_, i) => i).find(i => (wasm.game_candidates_mask() & (1 << i)) !== 0)].name} first.` : `The bot found ${people[wasm.game_human_target()].name}.`;
   $("#win-title").textContent = title;
   $("#win-copy").textContent = copy;
-  $("#win-dialog").showModal();
+  if (!$("#win-dialog").open) $("#win-dialog").showModal();
+  if (!nextPickerTimer) {
+    nextPickerTimer = window.setTimeout(() => {
+      nextPickerTimer = 0;
+      newGame();
+    }, 2400);
+  }
   document.body.classList.add("game-won");
   $("#turn-label").textContent = winner === 1 ? "You won" : "Bot won";
   $("#turn-detail").textContent = "Start another round to play again.";
@@ -162,6 +164,10 @@ function answerBot() {
 }
 function newGame(characterIndex = null) {
   window.clearTimeout(botTimer);
+  window.clearTimeout(nextPickerTimer);
+  nextPickerTimer = 0;
+  $("#game-area").classList.remove("bot-thinking");
+  if ($("#answer-dialog").open) $("#answer-dialog").close();
   if (characterIndex === null) {
     $("#game-area").hidden = true;
     $("#character-picker").hidden = false;
@@ -172,7 +178,6 @@ function newGame(characterIndex = null) {
   }
   const seed = globalThis.crypto?.getRandomValues ? crypto.getRandomValues(new Uint32Array(1))[0] : (Date.now() >>> 0);
   wasm.game_new(seed, characterIndex);
-  selectedPerson = characterIndex;
   $("#character-picker").hidden = true;
   $("#game-area").hidden = false;
   $("#win-dialog").close();
@@ -198,11 +203,9 @@ async function start() {
     $("#play-again").addEventListener("click", () => newGame());
     $("#answer-yes").addEventListener("click", answerBot);
     $("#answer-no").addEventListener("click", answerBot);
-    setConnection("Ready", true);
     $("#new-game").disabled = false;
     renderPicker();
   } catch (error) {
-    setConnection("Build required");
     $("#fatal-error").hidden = false;
     $("#fatal-error").textContent = `Game engine could not start: ${error.message}. Run ./scripts/build.sh and refresh.`;
   }

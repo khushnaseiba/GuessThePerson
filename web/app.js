@@ -5,52 +5,48 @@ let wasm;
 let people = [];
 let properties = [];
 let selectedPerson = -1;
+let pendingBotQuestion = invalid;
+let botTimer = 0;
 
 function readString(pointer, length) {
   return utf8.decode(new Uint8Array(wasm.memory.buffer, pointer, length));
 }
-
-function nameAt(index) {
-  return readString(wasm.person_name_ptr(index), wasm.person_name_len(index));
-}
-
-function phraseAt(index) {
-  return readString(wasm.property_name_ptr(index), wasm.property_name_len(index));
-}
-
-function makePortrait(index, className = "") {
+function makePortrait(index) {
   const image = document.createElement("img");
   image.src = `../assets/portraits/person-${String(index).padStart(2, "0")}.svg`;
-  image.alt = `${people[index].name}'s illustrated portrait`;
+  image.alt = `${people[index].name} portrait`;
   image.loading = "lazy";
-  image.className = className;
   return image;
 }
-
 function setConnection(text, ready = false) {
   $("#connection-status").textContent = text;
   $(".status-dot").style.background = ready ? "var(--mint)" : "var(--accent)";
 }
-
+function buildPersonCard(index, picker = false) {
+  const card = document.createElement("button");
+  card.type = "button";
+  card.className = picker ? "person-card pick-card" : "person-card";
+  card.append(makePortrait(index));
+  const name = document.createElement("span");
+  name.className = "person-name";
+  name.textContent = people[index].name;
+  card.append(name);
+  if (picker) card.addEventListener("click", () => newGame(index));
+  return card;
+}
+function renderPicker() {
+  const root = $("#picker-grid");
+  root.replaceChildren();
+  people.forEach((_, index) => root.append(buildPersonCard(index, true)));
+}
 function renderSecret() {
   const index = wasm.game_human_target();
   const card = $("#secret-card");
-  card.replaceChildren();
-  card.append(makePortrait(index));
-  const details = document.createElement("div");
-  const title = document.createElement("div");
-  title.className = "secret-name";
-  title.textContent = people[index].name;
-  const caption = document.createElement("div");
-  caption.className = "secret-caption";
-  caption.textContent = "Your secret person";
-  const badge = document.createElement("span");
-  badge.className = "secret-badge";
-  badge.textContent = "KEEP IT SECRET";
-  details.append(title, caption, badge);
-  card.append(details);
+  card.replaceChildren(makePortrait(index));
+  const name = document.createElement("strong");
+  name.textContent = people[index].name;
+  card.append(name);
 }
-
 function renderQuestions() {
   const root = $("#questions");
   root.replaceChildren();
@@ -62,189 +58,153 @@ function renderQuestions() {
     button.className = "question-button";
     button.textContent = phrase[0].toUpperCase() + phrase.slice(1);
     button.disabled = wasm.game_can_ask(index) === 0 || wasm.game_winner() !== 0;
-    button.title = button.disabled ? "This trait does not split the remaining candidates" : `Ask: Does your person ${phrase}?`;
     button.addEventListener("click", () => askQuestion(index));
     root.append(button);
   });
-  $("#question-note").textContent = usable === 0
-    ? "No useful questions remain on this board."
-    : `${usable} question${usable === 1 ? "" : "s"} can still split your candidates.`;
+  $("#question-note").textContent = usable ? `${usable} useful questions remain.` : "No useful questions remain.";
 }
-
 function renderPeople() {
   const root = $("#people-grid");
-  const candidateMask = wasm.game_candidates_mask();
+  const mask = wasm.game_candidates_mask();
   root.replaceChildren();
   people.forEach((person, index) => {
-    const active = (candidateMask & (1 << index)) !== 0;
-    const card = document.createElement("button");
-    card.type = "button";
-    card.className = `person-card${active ? "" : " eliminated"}${selectedPerson === index && active ? " selected" : ""}`;
+    const active = (mask & (1 << index)) !== 0;
+    const card = buildPersonCard(index);
+    card.classList.toggle("eliminated", !active);
     card.disabled = !active || wasm.game_winner() !== 0;
-    card.setAttribute("aria-pressed", String(selectedPerson === index));
-    card.setAttribute("aria-label", `${person.name}${active ? ", still possible" : ", eliminated"}`);
-    if (!active) {
-      const stamp = document.createElement("span");
-      stamp.className = "eliminated-stamp";
-      stamp.textContent = "CROSSED OFF";
-      card.append(stamp);
-    }
-    card.append(makePortrait(index));
-    const name = document.createElement("span");
-    name.className = "person-name";
-    name.textContent = person.name;
-    card.append(name);
-    const tags = document.createElement("span");
-    tags.className = "trait-tags";
-    let count = 0;
     person.traits.forEach((hasTrait, traitIndex) => {
-      if (hasTrait && count < 3) {
-        const tag = document.createElement("span");
-        tag.className = "trait-tag";
-        tag.textContent = properties[traitIndex];
-        tags.append(tag);
-        count += 1;
-      }
-    });
-    card.append(tags);
-    card.addEventListener("click", () => {
-      selectedPerson = selectedPerson === index ? -1 : index;
-      renderPeople();
-      $("#board-subtitle").textContent = selectedPerson === -1
-        ? "Find the bot's secret person."
-        : `${people[selectedPerson].name} is still a possible answer.`;
+      if (!hasTrait) return;
+      const tag = document.createElement("span");
+      tag.className = "trait-tag";
+      tag.textContent = properties[traitIndex];
+      card.append(tag);
     });
     root.append(card);
   });
   $("#remaining-count").textContent = wasm.game_candidate_count();
 }
-
 function logLine(actor, property, answer, eliminated) {
-  const article = document.createElement("div");
-  article.className = "log-entry";
-  const heading = document.createElement("div");
-  heading.className = "log-title";
-  heading.textContent = actor;
-  const answerTag = document.createElement("span");
-  answerTag.className = `log-answer ${answer ? "yes" : "no"}`;
-  answerTag.textContent = answer ? "YES" : "NO";
-  heading.append(answerTag);
-  const detail = document.createElement("div");
-  detail.className = "log-detail";
-  detail.textContent = `Does your person ${properties[property]}? ${eliminated} candidate${eliminated === 1 ? "" : "s"} crossed off.`;
-  article.append(heading, detail);
-  return article;
+  const line = document.createElement("p");
+  line.className = "log-entry";
+  line.textContent = `${actor}: ${properties[property]}? ${answer ? "Yes" : "No"}. ${eliminated} eliminated.`;
+  return line;
 }
-
 function renderLog() {
   const root = $("#round-log");
-  const humanQuestion = wasm.game_last_human_question();
-  const botQuestion = wasm.game_last_bot_question();
-  if (humanQuestion === invalid && botQuestion === invalid) {
-    root.innerHTML = '<p class="log-empty">No questions yet. Make the first move.</p>';
+  root.replaceChildren();
+  const human = wasm.game_last_human_question();
+  const bot = wasm.game_last_bot_question();
+  if (human === invalid && bot === invalid) {
+    root.textContent = "No turns yet.";
     return;
   }
-  root.replaceChildren();
-  if (humanQuestion !== invalid) {
-    root.append(logLine("YOU ASKED", humanQuestion, wasm.game_last_human_answer() !== 0, wasm.game_last_human_eliminated()));
-  }
-  if (botQuestion !== invalid) {
-    root.append(logLine("BOT ASKED ABOUT YOUR PERSON", botQuestion, wasm.game_last_bot_answer() !== 0, wasm.game_last_bot_eliminated()));
-  }
+  if (human !== invalid) root.append(logLine("You asked", human, wasm.game_last_human_answer() !== 0, wasm.game_last_human_eliminated()));
+  if (bot !== invalid) root.append(logLine("Bot asked", bot, wasm.game_last_bot_answer() !== 0, wasm.game_last_bot_eliminated()));
 }
-
 function renderResult() {
   const winner = wasm.game_winner();
-  const banner = $("#result-banner");
-  banner.hidden = winner === 0;
-  if (winner === 0) return;
-  banner.className = `result-banner${winner === 2 ? " loss" : ""}`;
-  const title = winner === 1 ? "You got there first! ✦" : "The bot got there first.";
-  const copy = winner === 1
-    ? `You narrowed the board to ${people[trailingIndex(wasm.game_candidates_mask())].name} before the bot found yours.`
-    : `The bot narrowed your secret person down to ${people[wasm.game_human_target()].name}. Try another round?`;
-  banner.replaceChildren();
-  const heading = document.createElement("div");
-  heading.className = "result-title";
-  heading.textContent = title;
-  const detail = document.createElement("div");
-  detail.className = "result-copy";
-  detail.textContent = copy;
-  banner.append(heading, detail);
-  $("#question-note").textContent = "Round over - start a new game when you're ready.";
-  $("#board-subtitle").textContent = winner === 1 ? "You found the secret person." : "The bot found your secret person.";
+  if (!winner) return;
+  const title = winner === 1 ? "You win!" : "Bot wins";
+  const copy = winner === 1 ? `You found ${people[Array.from({length: people.length}, (_, i) => i).find(i => (wasm.game_candidates_mask() & (1 << i)) !== 0)].name} first.` : `The bot found ${people[wasm.game_human_target()].name}.`;
+  $("#win-title").textContent = title;
+  $("#win-copy").textContent = copy;
+  $("#win-dialog").showModal();
+  document.body.classList.add("game-won");
+  $("#turn-label").textContent = winner === 1 ? "You won" : "Bot won";
+  $("#turn-detail").textContent = "Start another round to play again.";
+  $("#result-banner").hidden = false;
+  $("#result-banner").textContent = title;
 }
-
-function trailingIndex(mask) {
-  for (let index = 0; index < people.length; index += 1) {
-    if ((mask & (1 << index)) !== 0) return index;
-  }
-  return 0;
-}
-
 function render() {
   renderQuestions();
   renderPeople();
   renderLog();
-  renderResult();
   $("#round-count").textContent = wasm.game_turns();
-  $("#new-game").disabled = false;
+  renderResult();
 }
-
 function askQuestion(property) {
+  if (wasm.game_winner()) return;
   const result = wasm.game_ask(property);
-  if (result === 1) {
-    $("#question-note").textContent = "That question does not exist.";
-    return;
-  }
-  if (result === 2) {
-    $("#question-note").textContent = "That trait no longer splits your remaining people.";
-    renderQuestions();
-    return;
-  }
-  selectedPerson = -1;
+  if (result === 1 || result === 2) return;
+  $("#turn-strip").classList.remove("turn-change");
+  void $("#turn-strip").offsetWidth;
+  $("#turn-strip").classList.add("turn-change");
+  $("#turn-label").textContent = "Bot's turn";
+  $("#turn-detail").textContent = "Thinking about your character";
+  $("#game-area").classList.add("bot-thinking");
   render();
-  if (result === 6) {
-    $("#question-note").textContent = "The bot has no useful question left. Start a fresh round.";
+  if (wasm.game_winner()) return;
+  pendingBotQuestion = wasm.game_last_bot_question();
+  if (pendingBotQuestion === invalid) {
+    $("#turn-label").textContent = "Your turn";
+    return;
   }
+  $("#bot-question-text").textContent = `Does your person ${properties[pendingBotQuestion]}?`;
+  const correct = (people[wasm.game_human_target()].traits[pendingBotQuestion]);
+  const yes = $("#answer-yes");
+  const no = $("#answer-no");
+  yes.disabled = !correct;
+  no.disabled = correct;
+  yes.classList.toggle("correct-answer", correct);
+  no.classList.toggle("correct-answer", !correct);
+  $("#answer-hint").textContent = "Only the truthful answer can be selected.";
+  botTimer = window.setTimeout(() => {
+    $("#game-area").classList.remove("bot-thinking");
+    $("#answer-dialog").showModal();
+  }, 850);
 }
-
-function newGame() {
-  let seed = (Date.now() ^ Math.floor(Math.random() * 0xffffffff)) >>> 0;
-  if (globalThis.crypto?.getRandomValues) {
-    const sample = new Uint32Array(1);
-    globalThis.crypto.getRandomValues(sample);
-    seed = sample[0];
+function answerBot() {
+  $("#answer-dialog").close();
+  $("#turn-label").textContent = "Your turn";
+  $("#turn-detail").textContent = "Choose another question";
+  render();
+  if (!wasm.game_winner()) document.body.classList.remove("game-won");
+}
+function newGame(characterIndex = null) {
+  window.clearTimeout(botTimer);
+  if (characterIndex === null) {
+    $("#game-area").hidden = true;
+    $("#character-picker").hidden = false;
+    $("#win-dialog").close();
+    document.body.classList.remove("game-won");
+    renderPicker();
+    return;
   }
-  wasm.game_new(seed);
-  selectedPerson = -1;
-  $("#result-banner").hidden = true;
-  $("#board-subtitle").textContent = "Find the bot's secret person.";
+  const seed = globalThis.crypto?.getRandomValues ? crypto.getRandomValues(new Uint32Array(1))[0] : (Date.now() >>> 0);
+  wasm.game_new(seed, characterIndex);
+  selectedPerson = characterIndex;
+  $("#character-picker").hidden = true;
+  $("#game-area").hidden = false;
+  $("#win-dialog").close();
+  $("#turn-label").textContent = "Your turn";
+  $("#turn-detail").textContent = "Choose a question";
+  document.body.classList.remove("game-won");
   renderSecret();
   render();
 }
-
 async function start() {
   try {
     const response = await fetch("./game.wasm");
     if (!response.ok) throw new Error("game.wasm was not found");
-    const bytes = await response.arrayBuffer();
-    const result = await WebAssembly.instantiate(bytes, {});
+    const result = await WebAssembly.instantiate(await response.arrayBuffer(), {});
     wasm = result.instance.exports;
     if (wasm.api_version() !== 1) throw new Error("unexpected WASM API version");
     people = Array.from({ length: wasm.person_count() }, (_, index) => ({
-      name: nameAt(index),
+      name: readString(wasm.person_name_ptr(index), wasm.person_name_len(index)),
       traits: Array.from({ length: wasm.property_count() }, (_, trait) => (wasm.person_traits(index) & (1 << trait)) !== 0),
     }));
-    properties = Array.from({ length: wasm.property_count() }, (_, index) => phraseAt(index));
-    $("#new-game").addEventListener("click", newGame);
+    properties = Array.from({ length: wasm.property_count() }, (_, index) => readString(wasm.property_name_ptr(index), wasm.property_name_len(index)));
+    $("#new-game").addEventListener("click", () => newGame());
+    $("#play-again").addEventListener("click", () => newGame());
+    $("#answer-yes").addEventListener("click", answerBot);
+    $("#answer-no").addEventListener("click", answerBot);
     setConnection("Ready", true);
-    newGame();
+    $("#new-game").disabled = false;
+    renderPicker();
   } catch (error) {
     setConnection("Build required");
     $("#fatal-error").hidden = false;
-    $("#fatal-error").textContent = `The game engine could not start (${error.message}). From the project root, run ./scripts/build.sh and refresh this page.`;
+    $("#fatal-error").textContent = `Game engine could not start: ${error.message}. Run ./scripts/build.sh and refresh.`;
   }
 }
-
 start();

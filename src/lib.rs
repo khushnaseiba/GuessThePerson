@@ -53,8 +53,8 @@ pub extern "C" fn property_name_len(index: u32) -> u32 {
 }
 
 #[no_mangle]
-pub extern "C" fn game_new(seed: u32) {
-    *state_mut() = Game::new(seed);
+pub extern "C" fn game_new(seed: u32, human_target: u32) {
+    *state_mut() = Game::new(seed, human_target);
 }
 
 #[no_mangle]

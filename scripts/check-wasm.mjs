@@ -18,7 +18,7 @@ const profiles = Array.from({ length: personCount }, (_, index) => game.person_t
 ensure(new Set(profiles).size === personCount, 'person profiles must be unique');
 
 for (const seed of [1, 71, 2026, 0xdeadbeef, 0]) {
-  game.game_new(seed);
+  game.game_new(seed, seed % personCount);
   let steps = 0;
   while (game.game_winner() === 0 && steps < 30) {
     const before = game.game_candidate_count();

@@ -36,10 +36,10 @@ impl Game {
         }
     }
 
-    pub fn new(seed: u32) -> Self {
+    pub fn new(seed: u32, human_target: u32) -> Self {
         let mut game = Self::empty();
         game.rng = if seed == 0 { 0x9e37_79b9 } else { seed };
-        game.human_target = game.next_random() % PEOPLE.len() as u32;
+        game.human_target = human_target.min(PEOPLE.len() as u32 - 1);
         game.bot_target = game.next_random() % PEOPLE.len() as u32;
         if game.bot_target == game.human_target {
             game.bot_target = (game.bot_target + 1) % PEOPLE.len() as u32;
@@ -164,7 +164,7 @@ mod tests {
 
     #[test]
     fn question_reduces_candidates_and_keeps_the_target() {
-        let mut game = Game::new(71);
+        let mut game = Game::new(71, 4);
         let before = game.candidates.count_ones();
         let property = (0..PROPERTY_PHRASES.len() as u32)
             .find(|property| game.can_ask(*property))
@@ -177,7 +177,7 @@ mod tests {
 
     #[test]
     fn invalid_and_unhelpful_questions_do_not_mutate_candidates() {
-        let mut game = Game::new(9);
+        let mut game = Game::new(9, 4);
         let before = game.candidates;
         assert_eq!(game.ask(99), 1);
         assert_eq!(game.candidates, before);
@@ -191,7 +191,7 @@ mod tests {
 
     #[test]
     fn one_candidate_wins_before_another_question() {
-        let mut game = Game::new(31);
+        let mut game = Game::new(31, 4);
         game.candidates = 1 << game.bot_target;
         assert_eq!(game.ask(0), 3);
         assert_eq!(game.winner, 1);
@@ -199,7 +199,7 @@ mod tests {
 
     #[test]
     fn a_full_game_eventually_finishes() {
-        let mut game = Game::new(2026);
+        let mut game = Game::new(2026, 4);
         for _ in 0..30 {
             if game.winner != 0 {
                 break;
